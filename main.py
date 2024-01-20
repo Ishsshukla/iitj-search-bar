@@ -28,7 +28,7 @@ df = pd.DataFrame(data)
 df.isnull().sum()
 df.head()
 df.loc[df.duplicated(subset='productName')] 
-df_copy1 =df.drop(columns=[ 'wishingUsers','_id']).copy()
+df_copy1 =df.drop(columns=[ 'wishingUsers']).copy()
 
 # Extract details and product names
 details = [item['details'] for item in data]
