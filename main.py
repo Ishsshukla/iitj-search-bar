@@ -1,20 +1,20 @@
-import pandas as pd
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import linear_kernel
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi import FastAPI
+import pandas as pd
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.metrics.pairwise import linear_kernel
-from fastapi import FastAPI
 import requests
+from typing import List, Tuple
+
 
 app = FastAPI()
-# origins = [
-#     "http://127.0.0.1:8000",
-#     "http://localhost:5173",
-#     "https://workshala-navy.vercel.app",
-#     # "https://intrship.onrender.com",
-#     "http://localhost:5000",
-# ]
-
+response = requests.get('https://trendify-ui65.onrender.com/products')
+data = response.json() 
+df = pd.DataFrame(data)  #converting the JSON data into a pandas DataFrame.
+# Enable CORS for all origins
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -22,16 +22,19 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-response = requests.get('https://trendify-ui65.onrender.com/products')
-data = response.json()  
-df = pd.DataFrame(data)
-df.isnull().sum()
-df.head()
-df.loc[df.duplicated(subset='productName')] 
-df_copy1 =df.drop(columns=[ 'wishingUsers']).copy()
 
-# Extract details and product names
+# Assuming 'data' is your product data
+# data = [
+#     {'_id': '65aa9fea11b750a2db1ad9ab', 'price': '3,990.00', 'details': 'Sneakers with a combination of materials, piec...', 'category': 'shoes', 'productName': 'DENIM SNEAKERS', 'productImage': 'https://static.zara.net/photos///2023/I/1/2/p/'},
+#     {'_id': '65aa9fea11b750a2db1ad9ac', 'price': '2200', 'details': 'Monochrome trainers. Seven-eyelet facing. The ...', 'category': 'shoes', 'productName': 'CHUNKY TRAINERS', 'productImage': 'https://static.zara.net/photos///2023/V/1/2/p/'},
+#     {'_id': '65aa9fea11b750a2db1ad9ad', 'price': '3,990.00', 'details': 'Sneakers. Plain upper. Seven-eyelet facing. Ch...', 'category': 'shoes', 'productName': 'CHUNKY TRAINERS', 'productImage': 'https://static.zara.net/photos///2023/I/1/2/p/'},
+#     {'_id': '65aa9fea11b750a2db1ad9ae', 'price': '2,990.00', 'details': 'Trainers. Combination of materials, pieces and...', 'category': 'shoes', 'productName': 'MULTIPIECE TRAINERS', 'productImage': 'https://static.zara.net/photos///2023/I/1/2/p/'},
+#     # Add more product entries as needed
+# ]
+
+# Extract details, categories, and product names
 details = [item['details'] for item in data]
+categories = [item['category'] for item in data]
 product_names = [item['productName'] for item in data]
 
 # Create TF-IDF vectorizer
@@ -41,34 +44,24 @@ tfidf_matrix = vectorizer.fit_transform(details)
 # Compute cosine similarity
 cosine_similarities = linear_kernel(tfidf_matrix, tfidf_matrix)
 
-def recommend_products(user_input):
-    # Find the index of the product in the data
-    index = product_names.index(user_input)
+def products_by_category(category_input: str) -> List[Tuple[str, str, str, str]]:
+    # Find the indices of products in the data based on the category
+    category_indices = [i for i, cat in enumerate(categories) if cat.lower() == category_input.lower()]
 
-    # Get the cosine similarity scores for the given product
-    sim_scores = list(enumerate(cosine_similarities[index]))
+    if category_indices:
+        # Get products with the specified category
+        matching_products = [(data[i]['productName'], data[i]['price'], data[i]['productImage'], data[i]['details']) for i in category_indices]
 
-    # Sort the products based on similarity scores
-    sim_scores = sorted(sim_scores, key=lambda x: x[1], reverse=True)
+        # Return the products with the same category
+        return matching_products
+    else:
+        return [("No products found for the given category.", "", "", "")]
 
-    # Get the top 3 similar products
-    top_products = sim_scores[1:4]
+@app.get("/products/{category}")
+def products_in_category(category: str):
+    products = products_by_category(category)
+    return products
 
-    # Get the indices of the top products
-    top_indices = [i[0] for i in top_products]
-
-    # Return the recommended products
-    return [(data[i]['productName'], data[i]['price'], data[i]['productImage'],data[i]['details']) for i in top_indices]
-user_input = "DENIM SNEAKERS"
-recommendations = recommend_products(user_input)
-
-# Display recommendations
-# Display recommendations
-for recommendation in recommendations:
-    print(f"Product Name: {recommendation[0]}\nPrice: {recommendation[1]}\ndetails: {recommendation[2]}\nProduct Image: {recommendation[3]}\n")
-    
-    
-@app.get("/recommendation/{product_name}")
-def recommendation_func(product_name: str):
-    recommendations = recommend_products(product_name)
-    return recommendations
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
